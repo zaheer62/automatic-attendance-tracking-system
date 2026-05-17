@@ -1,0 +1,82 @@
+[
+  {
+    "student_id": 13,
+    "classroom_id": "classroom-1",
+    "confidence": 0.8668,
+    "method": "face_recognition",
+    "timestamp": "2026-05-13T06:13:13.134945",
+    "queued_at": "2026-05-13T06:13:13.163483"
+  },
+  {
+    "student_id": 13,
+    "classroom_id": "classroom-1",
+    "confidence": 0.8374,
+    "method": "face_recognition",
+    "timestamp": "2026-05-13T06:13:23.176537",
+    "queued_at": "2026-05-13T06:13:23.210882"
+  },
+  {
+    "student_id": 13,
+    "classroom_id": "classroom-1",
+    "confidence": 0.877,
+    "method": "face_recognition",
+    "timestamp": "2026-05-13T06:13:33.277030",
+    "queued_at": "2026-05-13T06:13:33.309464"
+  },
+  {
+    "student_id": 13,
+    "classroom_id": "classroom-1",
+    "confidence": 0.8178,
+    "method": "face_recognition",
+    "timestamp": "2026-05-13T06:13:43.277458",
+    "queued_at": "2026-05-13T06:13:43.309858"
+  },
+  {
+    "student_id": 13,
+    "classroom_id": "classroom-1",
+    "confidence": 0.8985,
+    "method": "face_recognition",
+    "timestamp": "2026-05-13T06:13:53.628073",
+    "queued_at": "2026-05-13T06:13:53.665187"
+  },
+  {
+    "student_id": 13,
+    "classroom_id": "classroom-1",
+    "confidence": 0.882,
+    "method": "face_recognition",
+    "timestamp": "2026-05-13T06:14:04.126597",
+    "queued_at": "2026-05-13T06:14:04.212438"
+  },
+  {
+    "student_id": 13,
+    "classroom_id": "classroom-1",
+    "confidence": 0.8415,
+    "method": "face_recognition",
+    "timestamp": "2026-05-13T06:14:14.461670",
+    "queued_at": "2026-05-13T06:14:14.532610"
+  },
+  {
+    "student_id": 13,
+    "classroom_id": "classroom-1",
+    "confidence": 0.8328,
+    "method": "face_recognition",
+    "timestamp": "2026-05-13T06:14:24.775216",
+    "queued_at": "2026-05-13T06:14:24.824836"
+  },
+  {
+    "student_id": 13,
+    "classroom_id": "classroom-1",
+    "confidence": 0.8497,
+    "method": "face_recognition",
+    "timestamp": "2026-05-13T06:14:34.958722",
+    "queued_at": "2026-05-13T06:14:35.012728"
+  },
+  {
+    "student_id": 13,
+    "classroom_id": "classroom-1",
+    "confidence": 0.8731,
+    "method": "face_recognition",
+    "timestamp": "2026-05-13T06:14:45.136591",
+    "queued_at": "2026-05-13T06:14:45.160840"
+  }
+]

@@ -1,0 +1,26 @@
+# infra/kiosk/.env.example
+# Copy to .env and fill in your values
+
+# URL of your central FastAPI backend
+SERVER_URL=http://localhost:8000
+
+# JWT token for a kiosk service account (get from /auth/login)
+AUTH_TOKEN=your_jwt_token_here
+
+# Which classroom this kiosk belongs to
+CLASSROOM_ID=classroom-1
+
+# Webcam index (0 = default built-in camera, 1 = second camera)
+CAMERA_INDEX=0
+
+# Seconds before the same student can be marked again
+COOLDOWN_SEC=10
+
+# Reload face embeddings from disk every N seconds (picks up new registrations)
+RELOAD_EVERY=300
+
+# Minimum confidence score to accept a face match (0.0 – 1.0)
+CONFIDENCE_THRESHOLD=0.80
+
+# Seconds between offline queue retry attempts
+RETRY_EVERY=30
