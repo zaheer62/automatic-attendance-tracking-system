@@ -1,11 +1,11 @@
 [phases.setup]
-nixPkgs = ["cmake", "gcc", "openblas", "python312"]
+nixPkgs = ["cmake", "gcc", "openblas", "python312", "python312Packages.pip"]
 
 [phases.install]
 cmds = [
-  "pip install setuptools",
-  "pip install dlib==19.24.6",
-  "pip install -r requirements.txt"
+  "python3.12 -m pip install setuptools",
+  "python3.12 -m pip install dlib==19.24.6",
+  "python3.12 -m pip install -r requirements.txt"
 ]
 
 [start]
