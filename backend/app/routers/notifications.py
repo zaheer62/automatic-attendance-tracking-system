@@ -1,48 +1,32 @@
 """
 notifications.py  –  /notifications router
 Handles student notification preferences, email alerts (SMTP), and SMS alerts (Twilio).
-
-Dependencies (add to requirements.txt):
-    twilio>=8.0.0
-    python-dotenv           # already likely present
-
-Environment variables required (.env):
-    # Email (SMTP — works with Gmail, SendGrid, etc.)
-    SMTP_HOST=smtp.gmail.com
-    SMTP_PORT=587
-    SMTP_USER=your@gmail.com
-    SMTP_PASS=your_app_password
-    MAIL_FROM=your@gmail.com
-
-    # SMS (Twilio)
-    TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-    TWILIO_AUTH_TOKEN=your_auth_token
-    TWILIO_FROM_NUMBER=+1xxxxxxxxxx
 """
-
+ 
 from __future__ import annotations
-
+ 
 import os
 import smtplib
 import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
-
+ 
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
-
-# ── adjust these imports to match your project layout ──────────────────────────
-from app.database import get_db
-from app.models import NotificationPrefs as NotificationPrefsModel   # see model below
-
+from twilio.rest import Client
+from twilio.base.exceptions import TwilioRestException
+ 
+from app.core.database import get_db
+from app.models.notification_prefs import NotificationPrefs as NotificationPrefsModel
+ 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/notifications", tags=["notifications"])
-
-
+ 
+ 
 # ─── Pydantic schemas ──────────────────────────────────────────────────────────
-
+ 
 class NotificationPrefsSchema(BaseModel):
     email_enabled: bool = False
     email_address: str = ""
@@ -53,21 +37,21 @@ class NotificationPrefsSchema(BaseModel):
     sms_number: str = ""
     sms_threshold: int = 75
     sms_on_absent: bool = True
-
+ 
     class Config:
         from_attributes = True
-
-
+ 
+ 
 class TestEmailRequest(BaseModel):
     email: str
-
-
+ 
+ 
 class TestSmsRequest(BaseModel):
     phone: str
-
-
+ 
+ 
 # ─── DB helpers ───────────────────────────────────────────────────────────────
-
+ 
 def get_or_create_prefs(student_id: int, db: Session) -> NotificationPrefsModel:
     prefs = db.query(NotificationPrefsModel).filter_by(student_id=student_id).first()
     if not prefs:
@@ -76,33 +60,36 @@ def get_or_create_prefs(student_id: int, db: Session) -> NotificationPrefsModel:
         db.commit()
         db.refresh(prefs)
     return prefs
-
-
+ 
+ 
 # ─── Email helper ─────────────────────────────────────────────────────────────
-
+ 
 def send_email(to: str, subject: str, html_body: str) -> None:
-    host = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    port = int(os.getenv("SMTP_PORT", 587))
-    user = os.getenv("SMTP_USER", "")
-    password = os.getenv("SMTP_PASS", "")
+    host      = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    port      = int(os.getenv("SMTP_PORT", 587))
+    user      = os.getenv("SMTP_USER", "")
+    password  = os.getenv("SMTP_PASS", "")
     from_addr = os.getenv("MAIL_FROM", user)
-
+ 
     if not user or not password:
         raise RuntimeError("SMTP credentials not configured in environment")
-
+ 
+    if user == "your@gmail.com" or password == "your_app_password":
+        raise RuntimeError("SMTP credentials are still placeholders — update your .env file")
+ 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = from_addr
-    msg["To"] = to
+    msg["From"]    = from_addr
+    msg["To"]      = to
     msg.attach(MIMEText(html_body, "html"))
-
+ 
     with smtplib.SMTP(host, port) as server:
         server.ehlo()
         server.starttls()
         server.login(user, password)
         server.sendmail(from_addr, to, msg.as_string())
-
-
+ 
+ 
 def build_test_email_html(student_id: int) -> str:
     return f"""
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px;">
@@ -116,8 +103,8 @@ def build_test_email_html(student_id: int) -> str:
       </p>
     </div>
     """
-
-
+ 
+ 
 def build_absence_email_html(student_name: str, subject_name: str, date: str, pct: float) -> str:
     color = "#dc2626" if pct < 75 else "#d97706"
     return f"""
@@ -138,34 +125,59 @@ def build_absence_email_html(student_name: str, subject_name: str, date: str, pc
       </p>
     </div>
     """
-
-
-# ─── SMS helper ───────────────────────────────────────────────────────────────
-
+ 
+ 
+# ─── SMS helper (Twilio) ──────────────────────────────────────────────────────
+ 
+def clean_phone(number: str) -> str:
+    """Normalize to E.164 format — strip spaces, ensure + prefix."""
+    number = number.strip().replace(" ", "").replace("-", "")
+    if not number.startswith("+"):
+        # Assume Indian number if no country code
+        if len(number) == 10 and number.isdigit():
+            number = "+91" + number
+        elif number.startswith("91") and len(number) == 12:
+            number = "+" + number
+        else:
+            number = "+" + number
+    return number
+ 
+ 
 def send_sms(to: str, body: str) -> None:
-    try:
-        from twilio.rest import Client  # type: ignore
-    except ImportError:
-        raise RuntimeError("twilio package not installed — run: pip install twilio")
-
-    sid = os.getenv("TWILIO_ACCOUNT_SID", "")
-    token = os.getenv("TWILIO_AUTH_TOKEN", "")
+    account_sid = os.getenv("TWILIO_ACCOUNT_SID", "")
+    auth_token  = os.getenv("TWILIO_AUTH_TOKEN", "")
     from_number = os.getenv("TWILIO_FROM_NUMBER", "")
-
-    if not sid or not token or not from_number:
-        raise RuntimeError("Twilio credentials not configured in environment")
-
-    client = Client(sid, token)
-    client.messages.create(body=body, from_=from_number, to=to)
-
-
+ 
+    if not account_sid or not auth_token:
+        raise RuntimeError("TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN not configured in .env")
+ 
+    if not from_number:
+        raise RuntimeError("TWILIO_FROM_NUMBER not configured in .env")
+ 
+    to_clean = clean_phone(to)
+    logger.info("[SMS] Sending to %s via Twilio", to_clean)
+ 
+    try:
+        client  = Client(account_sid, auth_token)
+        message = client.messages.create(
+            body=body,
+            from_=from_number,
+            to=to_clean,
+        )
+        logger.info("[SMS] Sent OK — SID: %s  status: %s", message.sid, message.status)
+ 
+    except TwilioRestException as e:
+        logger.error("[SMS] Twilio error %s: %s", e.code, e.msg)
+        raise RuntimeError(f"Twilio error {e.code}: {e.msg}")
+ 
+ 
 # ─── Routes ───────────────────────────────────────────────────────────────────
-
+ 
 @router.get("/prefs/{student_id}", response_model=NotificationPrefsSchema)
 def get_prefs(student_id: int, db: Session = Depends(get_db)):
     return get_or_create_prefs(student_id, db)
-
-
+ 
+ 
 @router.post("/prefs/{student_id}", response_model=NotificationPrefsSchema)
 def save_prefs(
     student_id: int,
@@ -178,8 +190,8 @@ def save_prefs(
     db.commit()
     db.refresh(prefs)
     return prefs
-
-
+ 
+ 
 @router.post("/test-email/{student_id}")
 def test_email(student_id: int, body: TestEmailRequest, db: Session = Depends(get_db)):
     try:
@@ -192,23 +204,23 @@ def test_email(student_id: int, body: TestEmailRequest, db: Session = Depends(ge
     except Exception as e:
         logger.error("test_email failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
-
-
+ 
+ 
 @router.post("/test-sms/{student_id}")
 def test_sms(student_id: int, body: TestSmsRequest, db: Session = Depends(get_db)):
     try:
         send_sms(
             to=body.phone,
-            body="✅ Attendance System: Your SMS alerts are configured correctly!",
+            body="Attendance Alert: Your attendance is being tracked. You will be notified when it drops below 75%.",
         )
         return {"status": "sent"}
     except Exception as e:
         logger.error("test_sms failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
-
-
-# ─── Trigger functions (call these from your attendance recording logic) ───────
-
+ 
+ 
+# ─── Trigger functions ────────────────────────────────────────────────────────
+ 
 def trigger_absence_notifications(
     student_id: int,
     student_name: str,
@@ -219,12 +231,12 @@ def trigger_absence_notifications(
 ) -> None:
     """
     Call this whenever a student is marked absent.
-    It checks their prefs and fires email / SMS as configured.
+    Checks their prefs and fires email / SMS as configured.
     """
     prefs = db.query(NotificationPrefsModel).filter_by(student_id=student_id).first()
     if not prefs:
         return
-
+ 
     # ── Email ──────────────────────────────────────────────────────────────────
     if (
         prefs.email_enabled
@@ -235,12 +247,13 @@ def trigger_absence_notifications(
         try:
             send_email(
                 to=prefs.email_address,
-                subject=f"⚠️ Absence Alert – {subject_name}",
+                subject=f"Absence Alert – {subject_name}",
                 html_body=build_absence_email_html(student_name, subject_name, date, current_pct),
             )
+            logger.info("[Email] Absence alert sent to %s", prefs.email_address)
         except Exception as e:
             logger.error("absence email failed for student %s: %s", student_id, e)
-
+ 
     # ── SMS ────────────────────────────────────────────────────────────────────
     if (
         prefs.sms_enabled
@@ -252,10 +265,11 @@ def trigger_absence_notifications(
             send_sms(
                 to=prefs.sms_number,
                 body=(
-                    f"Attendance Alert: You were absent in {subject_name} on {date}. "
+                    f"Attendance Alert: {student_name} was absent in {subject_name} on {date}. "
                     f"Current attendance: {current_pct:.1f}%"
-                    + (" — below 75%!" if current_pct < 75 else "")
+                    + (" - below 75%!" if current_pct < 75 else "")
                 ),
             )
+            logger.info("[SMS] Absence alert sent to %s", prefs.sms_number)
         except Exception as e:
             logger.error("absence SMS failed for student %s: %s", student_id, e)

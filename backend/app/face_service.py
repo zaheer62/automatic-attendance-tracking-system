@@ -3,68 +3,45 @@ from sqlalchemy.orm import Session
 from app.models.face import FaceEmbedding
 import pickle
 import cv2
+import face_recognition
 
-face_cascade = cv2.CascadeClassifier(
-    cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-)
+# How strict the match is. Lower = stricter. 0.5 is tight, 0.6 is default, 0.5 recommended
+TOLERANCE = 0.5
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
-def detect_and_crop_face(image_bytes: bytes):
-    """Return a 200×200 grayscale face crop, or None."""
+def detect_and_encode_face(image_bytes: bytes):
+    """Return 128-d face encoding, or None if no face detected."""
     nparr = np.frombuffer(image_bytes, np.uint8)
     img   = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
         return None
 
-    for frame in [img, cv2.flip(img, 1)]:
-        gray  = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        for scale, neighbors, minsize in [
-            (1.1, 5, (60, 60)),
-            (1.05, 3, (40, 40)),
-            (1.3,  2, (30, 30)),
-        ]:
-            faces = face_cascade.detectMultiScale(
-                gray, scale, neighbors, minSize=minsize
-            )
-            if len(faces) > 0:
-                x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
-                crop = gray[y:y+h, x:x+w]
-                crop = cv2.resize(crop, (200, 200))
-                crop = cv2.equalizeHist(crop)
-                return crop
+    # face_recognition uses RGB not BGR
+    rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-    return None
+    # Detect face locations
+    locations = face_recognition.face_locations(rgb, model="hog")
+    if not locations:
+        # Try flipped image
+        rgb = cv2.cvtColor(cv2.flip(img, 1), cv2.COLOR_BGR2RGB)
+        locations = face_recognition.face_locations(rgb, model="hog")
+        if not locations:
+            print("[face] No face detected")
+            return None
 
-
-def _build_recognizer(all_embeddings):
-    """Train a fresh LBPH recognizer from DB rows."""
-    recognizer = cv2.face.LBPHFaceRecognizer_create(
-        radius=2, neighbors=16, grid_x=8, grid_y=8
-    )
-    faces, labels = [], []
-    for row in all_embeddings:
-        data = pickle.loads(row.embedding)
-        # data may be a single face or a list of faces (multi-sample)
-        if isinstance(data, list):
-            for face_arr in data:
-                faces.append(face_arr)
-                labels.append(row.student_id)
-        else:
-            faces.append(data)
-            labels.append(row.student_id)
-
-    if not faces:
+    # Get encoding for the largest face
+    encodings = face_recognition.face_encodings(rgb, locations)
+    if not encodings:
         return None
 
-    recognizer.train(faces, np.array(labels))
-    return recognizer
+    return encodings[0]  # 128-d numpy array
 
 # ── public API ────────────────────────────────────────────────────────────────
 
 def save_face_embedding(student_id: int, image_bytes: bytes, db: Session):
-    crop = detect_and_crop_face(image_bytes)
-    if crop is None:
+    encoding = detect_and_encode_face(image_bytes)
+    if encoding is None:
         print(f"[face] No face detected for student {student_id}")
         return False
 
@@ -73,46 +50,58 @@ def save_face_embedding(student_id: int, image_bytes: bytes, db: Session):
     ).first()
 
     if existing:
-        # Append new sample to existing list for better accuracy
         data = pickle.loads(existing.embedding)
         if isinstance(data, list):
-            data.append(crop)
+            data.append(encoding)
         else:
-            data = [data, crop]         # migrate old single-array format
+            data = [data, encoding]
         existing.embedding = pickle.dumps(data)
     else:
         db.add(FaceEmbedding(
             student_id=student_id,
-            embedding=pickle.dumps([crop])  # always store as list
+            embedding=pickle.dumps([encoding])
         ))
 
     db.commit()
-    print(f"[face] Saved embedding for student {student_id}")
+    print(f"[face] Saved encoding for student {student_id}")
     return True
 
 
 def recognize_face(image_bytes: bytes, db: Session):
-    crop = detect_and_crop_face(image_bytes)
-    if crop is None:
+    encoding = detect_and_encode_face(image_bytes)
+    if encoding is None:
+        print("[face] No face detected in image")
         return None, 0.0
 
     all_embeddings = db.query(FaceEmbedding).all()
     if not all_embeddings:
+        print("[face] No embeddings in database")
         return None, 0.0
 
-    recognizer = _build_recognizer(all_embeddings)
-    if recognizer is None:
-        return None, 0.0
+    best_match_id = None
+    best_distance = float("inf")
 
-    label, distance = recognizer.predict(crop)
+    for row in all_embeddings:
+        data = pickle.loads(row.embedding)
+        stored_encodings = data if isinstance(data, list) else [data]
 
-    # LBPH distance: lower = better. 0 = perfect, ~80 = same person, >100 = different
-    confidence = round(max(0.0, 1.0 - distance / 100.0), 2)
-    print(f"[face] Predicted student_id={label}, distance={distance:.1f}, confidence={confidence}")
+        # Compare against all stored encodings for this student
+        distances = face_recognition.face_distance(stored_encodings, encoding)
+        min_dist  = float(np.min(distances))
 
-    # Only accept if distance is low enough (strict threshold)
-    if distance < 120:
-        return label, confidence
+        print(f"[face] student_id={row.student_id}, min_distance={min_dist:.3f}")
 
-    print(f"[face] Rejected match (distance {distance:.1f} too high)")
+        if min_dist < best_distance:
+            best_distance = min_dist
+            best_match_id = row.student_id
+
+    confidence = round(max(0.0, 1.0 - best_distance), 2)
+    print(f"[face] Best match: student_id={best_match_id}, distance={best_distance:.3f}, confidence={confidence}")
+
+    # Reject if distance is above tolerance (unknown face)
+    if best_distance <= TOLERANCE:
+        print(f"[face] Accepted match for student_id={best_match_id}")
+        return best_match_id, confidence
+
+    print(f"[face] Rejected — unknown face (distance {best_distance:.3f} > tolerance {TOLERANCE})")
     return None, confidence

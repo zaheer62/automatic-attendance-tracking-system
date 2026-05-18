@@ -11,6 +11,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
+import requests
 
 router = APIRouter(prefix="/alerts", tags=["Alerts"])
 
@@ -27,6 +28,10 @@ def send_email(to: str, subject: str, body: str):
 
     if not smtp_user or not smtp_pass:
         print(f"[EMAIL SKIPPED] SMTP not configured. Would send to {to}: {subject}")
+        return False
+
+    if smtp_user == "your@gmail.com" or smtp_pass == "your_app_password":
+        print(f"[EMAIL SKIPPED] SMTP credentials are still placeholders. Update your .env file.")
         return False
 
     try:
@@ -48,24 +53,45 @@ def send_email(to: str, subject: str, body: str):
 
 
 def send_sms(to: str, body: str):
-    """Send SMS via Twilio. Reads config from environment variables."""
-    try:
-        from twilio.rest import Client
-        account_sid = os.getenv("TWILIO_ACCOUNT_SID", "")
-        auth_token = os.getenv("TWILIO_AUTH_TOKEN", "")
-        from_number = os.getenv("TWILIO_FROM_NUMBER", "")
-
-        if not account_sid or not auth_token or not from_number:
-            print(f"[SMS SKIPPED] Twilio not configured. Would send to {to}: {body}")
-            return False
-
-        client = Client(account_sid, auth_token)
-        client.messages.create(body=body, from_=from_number, to=to)
-        print(f"[SMS SENT] To: {to}")
-        return True
-    except ImportError:
-        print("[SMS ERROR] twilio package not installed. Run: pip install twilio")
+    """Send SMS via Fast2SMS — works with Indian numbers."""
+    api_key = os.getenv("FAST2SMS_API_KEY", "")
+    if not api_key:
+        print(f"[SMS SKIPPED] FAST2SMS_API_KEY not configured. Would send to {to}: {body}")
         return False
+
+    # Strip +91 prefix, keep only 10 digits
+    number = to.strip()
+    if number.startswith("+91"):
+        number = number[3:]
+    elif number.startswith("91") and len(number) == 12:
+        number = number[2:]
+
+    if len(number) != 10 or not number.isdigit():
+        print(f"[SMS ERROR] Invalid Indian mobile number: {to}")
+        return False
+
+    try:
+        response = requests.get(
+            "https://www.fast2sms.com/dev/bulkV2",
+            headers={"authorization": api_key},
+            params={
+                "route": "q",
+                "message": body,
+                "language": "english",
+                "flash": 0,
+                "numbers": number,
+            },
+            timeout=10
+        )
+        result = response.json()
+        print(f"[SMS] Fast2SMS response: {result}")
+
+        if result.get("return"):
+            print(f"[SMS SENT] To: {number}")
+            return True
+        else:
+            print(f"[SMS ERROR] {result.get('message', result)}")
+            return False
     except Exception as e:
         print(f"[SMS ERROR] {e}")
         return False
@@ -213,7 +239,6 @@ def check_attendance_alerts(
     alerts_sent = []
     students = db.query(User).filter(User.role == UserRole.student).all()
 
-    # Pre-fetch subject names
     from app.models.subject import Subject
     subject_map = {s.id: s.name for s in db.query(Subject).all()}
 
@@ -233,7 +258,7 @@ def check_attendance_alerts(
 
         for config in configs:
             if percentage < config.threshold_percentage:
-                # Skip if already logged recently
+
                 existing = db.query(AlertLog).filter(
                     AlertLog.student_id == student.id,
                     AlertLog.subject_id == config.subject_id
@@ -253,30 +278,24 @@ def check_attendance_alerts(
                 email_subject = f"⚠️ Low Attendance Alert – {student.full_name}"
                 sms_body = (
                     f"Alert: {student.full_name}'s attendance is "
-                    f"{round(percentage,1)}%, below the {config.threshold_percentage}% threshold."
+                    f"{round(percentage, 1)}%, below the {config.threshold_percentage}% threshold."
                 )
 
                 sent_channels = []
 
                 # ── Email alerts ──────────────────────────────────────────
                 if config.email_enabled:
-                    # Send to student
                     if getattr(student, "email", None):
                         ok = send_email(student.email, email_subject, email_body)
                         if ok:
                             sent_channels.append("email→student")
 
-                    # Send to teacher
                     if teacher_email:
-                        teacher_body = build_email_body(
-                            student.full_name, percentage,
-                            config.threshold_percentage, subject_name
-                        )
-                        ok = send_email(teacher_email, email_subject, teacher_body)
+                        ok = send_email(teacher_email, email_subject, email_body)
                         if ok:
                             sent_channels.append("email→teacher")
 
-                # ── SMS alerts ───────────────────────────────────────────
+                # ── SMS alerts ────────────────────────────────────────────
                 if config.sms_enabled:
                     student_phone = getattr(student, "phone_number", None)
                     if student_phone:
@@ -289,7 +308,7 @@ def check_attendance_alerts(
                         if ok:
                             sent_channels.append("sms→teacher")
 
-                # ── Log the alert ────────────────────────────────────────
+                # ── Log the alert ─────────────────────────────────────────
                 log = AlertLog(
                     student_id=student.id,
                     subject_id=config.subject_id,
