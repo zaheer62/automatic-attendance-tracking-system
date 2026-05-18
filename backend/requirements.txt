@@ -29,6 +29,7 @@ email-validator==2.3.0
 emails==1.1.1
 et_xmlfile==2.0.0
 face-recognition==1.3.0
+face-recognition-models>=0.3.0
 fastapi==0.136.1
 frozenlist==1.8.0
 greenlet==3.5.0
