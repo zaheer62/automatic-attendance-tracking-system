@@ -4,7 +4,6 @@ aiohttp-retry==2.9.1
 aiosignal==1.4.0
 alembic==1.18.4
 amqp==5.3.1
-annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.13.0
 APScheduler==3.11.2
@@ -22,14 +21,11 @@ click-repl==0.3.0
 colorama==0.4.6
 cryptography==48.0.0
 dkimpy==1.1.8
-dlib==19.24.6
 dnspython==2.8.0
 ecdsa==0.19.2
 email-validator==2.3.0
 emails==1.1.1
 et_xmlfile==2.0.0
-face-recognition==1.3.0
-face-recognition-models @ git+https://github.com/ageitgey/face_recognition_models
 fastapi==0.136.1
 frozenlist==1.8.0
 greenlet==3.5.0
@@ -81,5 +77,3 @@ uvicorn==0.46.0
 vine==5.1.0
 wcwidth==0.7.0
 yarl==1.23.0
-
-
