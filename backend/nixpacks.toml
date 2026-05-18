@@ -1,0 +1,12 @@
+[phases.setup]
+nixPkgs = ["cmake", "gcc", "libopenblas", "python312"]
+
+[phases.install]
+cmds = [
+  "pip install setuptools",
+  "pip install dlib==19.24.6",
+  "pip install -r requirements.txt"
+]
+
+[start]
+cmd = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"

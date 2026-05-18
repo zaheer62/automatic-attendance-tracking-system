@@ -1,6 +1,6 @@
 [build]
 builder = "nixpacks"
-buildCommand = "pip install setuptools && pip install git+https://github.com/ageitgey/face_recognition_models && python -c \"import face_recognition_models; import face_recognition; print('[build] face_recognition models loaded successfully')\""
+buildCommand = "pip install setuptools && pip install dlib && pip install face_recognition && pip install git+https://github.com/ageitgey/face_recognition_models"
 
 [deploy]
 startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"

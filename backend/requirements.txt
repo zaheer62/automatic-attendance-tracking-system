@@ -22,7 +22,7 @@ click-repl==0.3.0
 colorama==0.4.6
 cryptography==48.0.0
 dkimpy==1.1.8
-dlib==20.0.1
+dlib==19.24.6
 dnspython==2.8.0
 ecdsa==0.19.2
 email-validator==2.3.0
@@ -81,4 +81,5 @@ uvicorn==0.46.0
 vine==5.1.0
 wcwidth==0.7.0
 yarl==1.23.0
+face_recognition_models@ git+https://github.com/ageitgey/face_recognition_models
 
