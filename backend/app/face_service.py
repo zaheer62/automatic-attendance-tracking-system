@@ -3,7 +3,17 @@ from sqlalchemy.orm import Session
 from app.models.face import FaceEmbedding
 import pickle
 import cv2
-import face_recognition
+
+try:
+    import face_recognition
+    print("[face_service] face_recognition imported successfully")
+except ImportError as e:
+    raise RuntimeError(
+        "[face_service] Failed to import face_recognition. "
+        "Ensure face_recognition_models is installed via: "
+        "pip install git+https://github.com/ageitgey/face_recognition_models\n"
+        f"Original error: {e}"
+    ) from e
 
 # How strict the match is. Lower = stricter. 0.5 is tight, 0.6 is default, 0.5 recommended
 TOLERANCE = 0.5
