@@ -29,7 +29,7 @@ email-validator==2.3.0
 emails==1.1.1
 et_xmlfile==2.0.0
 face-recognition==1.3.0
-git+https://github.com/ageitgey/face_recognition_models@master#egg=face_recognition_models
+face-recognition-models @ git+https://github.com/ageitgey/face_recognition_models
 fastapi==0.136.1
 frozenlist==1.8.0
 greenlet==3.5.0
@@ -81,5 +81,5 @@ uvicorn==0.46.0
 vine==5.1.0
 wcwidth==0.7.0
 yarl==1.23.0
-face_recognition_models@ git+https://github.com/ageitgey/face_recognition_models
+
 
