@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import engine, Base
@@ -8,9 +9,11 @@ import app.models
 
 app = FastAPI(title="Attendance Tracking System", version="1.0.0")
 
+origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -27,7 +30,7 @@ app.include_router(reports.router)
 app.include_router(privacy.router)
 app.include_router(sync.router)
 app.include_router(admin_stats.router)
-app.include_router(notifications.router)  # ← added
+app.include_router(notifications.router)
 
 @app.on_event("startup")
 def startup():
