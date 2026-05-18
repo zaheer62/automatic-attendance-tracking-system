@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["cmake", "gcc", "libopenblas", "python312"]
+nixPkgs = ["cmake", "gcc", "openblas", "python312"]
 
 [phases.install]
 cmds = [
