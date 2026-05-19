@@ -9,7 +9,12 @@ import app.models
 
 app = FastAPI(title="Attendance Tracking System", version="1.0.0")
 
-origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:3001,http://localhost:3002").split(",")
+origins = [
+    "https://automatic-attendance-tracking-system-b8dc-dyakmqkfv.vercel.app",
+    "https://automatic-attendance-tracking-system-syste-lilac.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:3001",
+]
 
 app.add_middleware(
     CORSMiddleware,
